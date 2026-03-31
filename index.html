@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>竹竿人平板大戰</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0;
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            background: #222; 
+            overflow: hidden;
+            touch-action: none; /* 防止平板瀏覽器預設的縮放與滾動 */
+        }
+        canvas { 
+            background: #f0f0f0; 
+            max-width: 100%;
+            max-height: 100%;
+        }
+        /* 虛擬按鈕提示（可選，目前直接畫在 Canvas 裡） */
+        .ui-layer {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 50px;
+            pointer-events: none;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// 自動調整畫布大小
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+const gravity = 0.7;
+
+class Fighter {
+    constructor({ position, velocity, color, offset }) {
+        this.position = position;
+        this.velocity = velocity;
+        this.width = 40;
+        this.height = 120;
+        this.color = color;
+        this.isAttacking = false;
+        this.health = 100;
+        this.attackBox = {
+            position: { x: this.position.x, y: this.position.y },
+            offset,
+            width: 80,
+            height: 50
+        };
+    }
+
+    draw() {
+        // 繪製竹竿人 (簡單線條風格)
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 5;
+        const x = this.position.x + this.width / 2;
+        const y = this.position.y;
+
+        // 頭
+        ctx.beginPath();
+        ctx.arc(x, y + 20, 15, 0, Math.PI * 2);
+        ctx.stroke();
+        // 身體
+        ctx.beginPath();
+        ctx.moveTo(x, y + 35);
+        ctx.lineTo(x, y + 80);
+        // 手
+        ctx.moveTo(x - 20, y + 50);
+        ctx.lineTo(x + 20, y + 50);
+        // 腳
+        ctx.moveTo(x, y + 80);
+        ctx.lineTo(x - 20, y + 120);
+        ctx.moveTo(x, y + 80);
+        ctx.lineTo(x + 20, y + 120);
+        ctx.stroke();
+
+        if (this.isAttacking) {
+            ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
+            ctx.fillRect(this.attackBox.position.x, this.attackBox.position.y, this.attackBox.width, this.attackBox.height);
+        }
+    }
+
+    update() {
+        this.draw();
+        this.attackBox.position.x = this.position.x + this.attackBox.offset.x;
+        this.attackBox.position.y = this.position.y + 20;
+
+        this.position.x += this.velocity.x;
+        this.position.y += this.velocity.y;
+
+        if (this.position.y + this.height + this.velocity.y >= canvas.height - 50) {
+            this.velocity.y = 0;
+            this.position.y = canvas.height - 50 - this.height;
+        } else {
+            this.velocity.y += gravity;
+        }
+    }
+
+    attack() {
+        this.isAttacking = true;
+        setTimeout(() => { this.isAttacking = false; }, 150);
+    }
+}
+
+const player = new Fighter({
+    position: { x: 100, y: 0 },
+    velocity: { x: 0, y: 0 },
+    color: '#007AFF', // 經典藍
+    offset: { x: 20, y: 0 }
+});
+
+const enemy = new Fighter({
+    position: { x: canvas.width - 150, y: 0 },
+    velocity: { x: 0, y: 0 },
+    color: '#FF3B30', // 經典紅
+    offset: { x: -60, y: 0 }
+});
+
+// 遊戲狀態偵測
+const keys = { left: false, right: false };
+
+function animate() {
+    window.requestAnimationFrame(animate);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 地面
+    ctx.fillStyle = '#444';
+    ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
+
+    player.update();
+    enemy.update();
+
+    // 簡單的 AI (讓對手會動)
+    if (enemy.position.x > player.position.x + 100) enemy.velocity.x = -2;
+    else if (enemy.position.x < player.position.x - 100) enemy.velocity.x = 2;
+    else {
+        enemy.velocity.x = 0;
+        if (Math.random() < 0.02) enemy.attack();
+    }
+
+    // 玩家移動
+    player.velocity.x = 0;
+    if (keys.left) player.velocity.x = -7;
+    if (keys.right) player.velocity.x = 7;
+
+    // 碰撞偵測
+    if (player.isAttacking && 
+        player.attackBox.position.x < enemy.position.x + enemy.width &&
+        player.attackBox.position.x + player.attackBox.width > enemy.position.x &&
+        player.attackBox.position.y < enemy.position.y + enemy.height &&
+        player.attackBox.position.y + player.attackBox.height > enemy.position.y
+    ) {
+        enemy.health -= 0.5;
+        player.isAttacking = false;
+    }
+
+    drawControls();
+}
+
+// 繪製虛擬按鈕介面
+function drawControls() {
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = "black";
+    
+    // 左移動
+    ctx.beginPath();
+    ctx.arc(80, canvas.height - 100, 50, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 右移動
+    ctx.beginPath();
+    ctx.arc(200, canvas.height - 100, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 攻擊 (右側)
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(canvas.width - 100, canvas.height - 100, 60, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 跳躍 (右側)
+    ctx.fillStyle = "black";
+    ctx.beginPath();
+    ctx.arc(canvas.width - 230, canvas.height - 100, 50, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.globalAlpha = 1.0;
+}
+
+// 觸控事件處理
+canvas.addEventListener('touchstart', handleTouch);
+canvas.addEventListener('touchend', handleTouchEnd);
+
+function handleTouch(e) {
+    e.preventDefault();
+    for (let i = 0; i < e.touches.length; i++) {
+        const touch = e.touches[i];
+        const tx = touch.clientX;
+        const ty = touch.clientY;
+
+        // 判斷點擊區域
+        if (tx < 130 && ty > canvas.height - 200) keys.left = true;
+        if (tx > 150 && tx < 300 && ty > canvas.height - 200) keys.right = true;
+        if (tx > canvas.width - 180 && ty > canvas.height - 200) player.attack();
+        if (tx > canvas.width - 300 && tx < canvas.width - 180 && ty > canvas.height - 200) {
+            if (player.position.y > canvas.height - 200) player.velocity.y = -20;
+        }
+    }
+}
+
+function handleTouchEnd(e) {
+    // 簡單重設 (實際開發可用 touch identifier 追蹤)
+    keys.left = false;
+    keys.right = false;
+}
+
+animate();
+</script>
+</body>
+</html>
