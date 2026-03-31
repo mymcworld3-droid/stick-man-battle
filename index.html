@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>竹竿人：醉酒雙搖桿對決</title>
+    <title>竹竿人：醉酒雙搖桿對決 (修正版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; font-family: sans-serif; }
         canvas { display: block; }
         #ui {
             position: absolute; top: 20px; width: 100%;
@@ -15,27 +15,24 @@
             color: white; font-size: 24px; font-weight: bold; pointer-events: none;
             text-shadow: 2px 2px 5px rgba(0,0,0,0.7);
         }
-        .joystick-zone {
-            position: absolute; bottom: 0; width: 50%; height: 45%;
-            z-index: 10;
-        }
+        .joystick-zone { position: absolute; bottom: 0; width: 50%; height: 45%; z-index: 10; }
         #left-zone { left: 0; }
         #right-zone { right: 0; }
         .hp-bar { width: 200px; height: 20px; background: #555; border: 2px solid #fff; border-radius: 10px; overflow: hidden; margin-top: 5px; }
         .hp-fill { height: 100%; width: 100%; transition: width 0.2s; }
-        #p1-fill { background: #ff4757; }
-        #p2-fill { background: #1e90ff; }
+        #p1-fill { background: #1e90ff; } /* 藍色 */
+        #p2-fill { background: #ff4757; } /* 紅色 */
     </style>
 </head>
 <body>
 
 <div id="ui">
     <div>
-        PLAYER 1
+        PLAYER 1 (BLUE)
         <div class="hp-bar"><div id="p1-fill" class="hp-fill"></div></div>
     </div>
     <div>
-        PLAYER 2
+        PLAYER 2 (RED)
         <div class="hp-bar"><div id="p2-fill" class="hp-fill"></div></div>
     </div>
 </div>
@@ -44,12 +41,11 @@
 <div id="right-zone" class="joystick-zone"></div>
 
 <script>
-const { Engine, Render, Runner, Bodies, Composite, Constraint, Body, Events, Vector } = Matter;
+const { Engine, Render, Runner, Bodies, Composite, Constraint, Body, Events } = Matter;
 
-// --- 初始化引擎 ---
 const engine = Engine.create();
 const world = engine.world;
-engine.gravity.y = 1.2; // 稍微加強重力，讓動作更紮實
+engine.gravity.y = 1.2;
 
 const render = Render.create({
     element: document.body,
@@ -65,36 +61,30 @@ const render = Render.create({
 Render.run(render);
 Runner.run(Runner.create(), engine);
 
-// --- 建立環境 ---
-const ground = Bodies.rectangle(window.innerWidth/2, window.innerHeight - 20, window.innerWidth, 40, { 
-    isStatic: true, 
-    friction: 1,
-    render: { fillStyle: '#34495e' } 
-});
+// 環境設定
+const ground = Bodies.rectangle(window.innerWidth/2, window.innerHeight - 20, window.innerWidth, 40, { isStatic: true, friction: 1, render: { fillStyle: '#34495e' } });
 const wallL = Bodies.rectangle(-20, window.innerHeight/2, 40, window.innerHeight, { isStatic: true });
 const wallR = Bodies.rectangle(window.innerWidth + 20, window.innerHeight/2, 40, window.innerHeight, { isStatic: true });
 Composite.add(world, [ground, wallL, wallR]);
 
-// --- 建立火柴人函式 ---
+// 建立火柴人
 function createFighter(x, y, color, direction) {
     const group = Body.nextGroup(true);
-    
-    // 身體各部位 (調整密度讓重心偏下)
     const head = Bodies.circle(x, y - 100, 18, { collisionFilter: { group: group }, density: 0.001, render: { fillStyle: color } });
     const chest = Bodies.rectangle(x, y - 60, 25, 60, { collisionFilter: { group: group }, density: 0.002, render: { fillStyle: color } });
+    // 手臂初始位置根據方向調整
     const arm = Bodies.rectangle(x + (direction * 30), y - 75, 55, 12, { collisionFilter: { group: group }, density: 0.001, render: { fillStyle: color } });
     const leg = Bodies.rectangle(x, y, 35, 50, { collisionFilter: { group: group }, density: 0.01, friction: 1, render: { fillStyle: color } });
 
-    // 關節串接
     const neck = Constraint.create({ bodyA: head, bodyB: chest, pointA: { x: 0, y: 15 }, pointB: { x: 0, y: -30 }, stiffness: 0.6, length: 2, render: { visible: false } });
     const shoulder = Constraint.create({ bodyA: chest, bodyB: arm, pointA: { x: direction * 12, y: -20 }, pointB: { x: direction * -25, y: 0 }, stiffness: 0.9, length: 2 });
     const waist = Constraint.create({ bodyA: chest, bodyB: leg, pointA: { x: 0, y: 30 }, pointB: { x: 0, y: -25 }, stiffness: 0.4, length: 2, render: { visible: false } });
 
-    // 魁儡支撐 (核心：防止無限倒地)
+    // 魁儡支撐，防止徹底倒地
     const support = Constraint.create({
         pointA: { x: x, y: y - 120 },
         bodyB: chest,
-        stiffness: 0.005, // 極小力量牽引，維持站姿
+        stiffness: 0.006,
         length: 50,
         render: { visible: false }
     });
@@ -104,65 +94,65 @@ function createFighter(x, y, color, direction) {
     return fighter;
 }
 
-const p1 = createFighter(window.innerWidth * 0.25, window.innerHeight - 100, '#ff4757', 1);
-const p2 = createFighter(window.innerWidth * 0.75, window.innerHeight - 100, '#1e90ff', -1);
+const p1 = createFighter(window.innerWidth * 0.25, window.innerHeight - 100, '#1e90ff', 1); // 藍色
+const p2 = createFighter(window.innerWidth * 0.75, window.innerHeight - 100, '#ff4757', -1); // 紅色
 
-// --- 射擊邏輯 ---
+// 射擊
 function shoot(fighter) {
     const now = Date.now();
-    if (now - fighter.lastShoot < 500) return; // 冷卻 0.5 秒
+    if (now - fighter.lastShoot < 400) return;
     fighter.lastShoot = now;
 
     const angle = fighter.arm.angle;
-    const bullet = Bodies.circle(
-        fighter.arm.position.x + Math.cos(angle) * 40,
-        fighter.arm.position.y + Math.sin(angle) * 40,
-        7, 
-        { label: 'bullet', frictionAir: 0, density: 0.01, render: { fillStyle: '#f1c40f' } }
-    );
-
-    const force = 20;
+    // 藍色往右噴，紅色往左噴，所以需要考慮 direction
+    const bulletX = fighter.arm.position.x + Math.cos(angle) * 35;
+    const bulletY = fighter.arm.position.y + Math.sin(angle) * 35;
+    
+    const bullet = Bodies.circle(bulletX, bulletY, 7, { label: 'bullet', frictionAir: 0, density: 0.01, render: { fillStyle: '#f1c40f' } });
+    const force = 18;
     Body.setVelocity(bullet, { x: Math.cos(angle) * force, y: Math.sin(angle) * force });
     
-    // 後座力
-    Body.applyForce(fighter.chest, fighter.chest.position, { x: -Math.cos(angle) * 0.02, y: -Math.sin(angle) * 0.02 });
+    Body.applyForce(fighter.chest, fighter.chest.position, { x: -Math.cos(angle) * 0.015, y: -Math.sin(angle) * 0.015 });
     
     Composite.add(world, bullet);
     setTimeout(() => Composite.remove(world, bullet), 2000);
 }
 
-// --- 平衡與行為邏輯 ---
+// 物理更新邏輯
 Events.on(engine, 'beforeUpdate', () => {
     [p1, p2].forEach(f => {
-        // 1. 自動直立力矩 (Torque)
-        const targetAngle = 0;
-        f.chest.torque = (targetAngle - f.chest.angle) * 0.15;
-        f.leg.torque = (targetAngle - f.leg.angle) * 0.1;
-
-        // 2. 邊界檢查 (防止穿牆)
-        if (f.leg.position.x < 50) Body.setPosition(f.leg, { x: 50, y: f.leg.position.y });
-        if (f.leg.position.x > window.innerWidth - 50) Body.setPosition(f.leg, { x: window.innerWidth - 50, y: f.leg.position.y });
+        // 自動平衡： torque (力矩) 讓身體回正
+        f.chest.torque = (0 - f.chest.angle) * 0.2;
+        f.leg.torque = (0 - f.leg.angle) * 0.15;
     });
 });
 
-// --- 搖桿與控制 ---
-const leftJoy = nipplejs.create({ zone: document.getElementById('left-zone'), mode: 'static', position: { left: '100px', bottom: '100px' }, color: 'red' });
-const rightJoy = nipplejs.create({ zone: document.getElementById('right-zone'), mode: 'static', position: { right: '100px', bottom: '100px' }, color: 'blue' });
+// 搖桿設置
+const leftJoy = nipplejs.create({ zone: document.getElementById('left-zone'), mode: 'static', position: { left: '100px', bottom: '100px' }, color: 'blue' });
+const rightJoy = nipplejs.create({ zone: document.getElementById('right-zone'), mode: 'static', position: { right: '100px', bottom: '100px' }, color: 'red' });
 
 function handleJoystick(manager, fighter) {
     manager.on('move', (evt, data) => {
         const force = data.force;
-        const angle = data.angle.radian;
+        let angle = data.angle.radian;
 
-        // 控制手臂旋轉 (加上角色初始方向修正)
+        // 🔥 核心修正邏輯
+        if (fighter.direction === 1) { 
+            // 藍色玩家：修正原本的左右相反
+            // 搖桿 $0$ 在右，藍人面向右，直接用 $-angle$ 修正對準
+            angle = -angle; 
+        } else {
+            // 紅色玩家：修正原本的上下相反
+            // 使用對稱角修正
+            angle = Math.PI - angle; 
+        }
+
         Body.setAngle(fighter.arm, angle);
 
-        // 控制移動
-        const moveForce = 0.008 * Math.min(force, 2);
-        const dirX = Math.cos(angle);
-        Body.applyForce(fighter.leg, fighter.leg.position, { x: dirX * moveForce, y: 0 });
+        // 移動邏輯
+        const moveX = Math.cos(data.angle.radian);
+        Body.applyForce(fighter.leg, fighter.leg.position, { x: moveX * 0.007 * Math.min(force, 2), y: 0 });
 
-        // 射擊觸發 (推到底或特定角度)
         if (force > 1.8) shoot(fighter);
     });
 }
@@ -170,7 +160,7 @@ function handleJoystick(manager, fighter) {
 handleJoystick(leftJoy, p1);
 handleJoystick(rightJoy, p2);
 
-// --- 碰撞傷害 ---
+// 碰撞偵測
 Events.on(engine, 'collisionStart', (event) => {
     event.pairs.forEach(pair => {
         const checkHit = (bullet, target, fillId, fighter) => {
@@ -178,7 +168,10 @@ Events.on(engine, 'collisionStart', (event) => {
                 fighter.hp -= 10;
                 document.getElementById(fillId).style.width = fighter.hp + '%';
                 Composite.remove(world, bullet);
-                if (fighter.hp <= 0) alert(fighter.color === '#ff4757' ? 'Blue Win!' : 'Red Win!');
+                if (fighter.hp <= 0) {
+                    alert(fighter.color === '#1e90ff' ? 'Red Wins!' : 'Blue Wins!');
+                    location.reload();
+                }
             }
         };
         checkHit(pair.bodyA, pair.bodyB, 'p2-fill', p2);
@@ -188,7 +181,6 @@ Events.on(engine, 'collisionStart', (event) => {
     });
 });
 
-// --- 自動縮放視窗 ---
 window.addEventListener('resize', () => {
     render.canvas.width = window.innerWidth;
     render.canvas.height = window.innerHeight;
