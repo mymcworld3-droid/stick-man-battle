@@ -41,7 +41,7 @@
 <div id="right-zone" class="joystick-zone"></div>
 
 <script>
-const { Engine, Render, Runner, Bodies, Composite, Constraint, Body, Events } = Matter;
+const { Engine, Render, Runner, Bodies, Composite, Constraint, Body, Events, Query } = Matter;
 
 const engine = Engine.create();
 const world = engine.world;
@@ -88,8 +88,8 @@ function createFighter(x, y, color, direction) {
         render: { visible: false }
     });
 
-    // 🔥 將 support 加入回傳物件中，以便後續更新座標
-    const fighter = { head, chest, arm, leg, support, hp: 100, color, direction, lastShoot: 0, lastJump: 0 };
+    // 🔥 將 support 加入回傳物件中，以便後續更新座標。同時紀錄原本的生成位置 (spawnPos) 供重生使用。
+    const fighter = { head, chest, arm, leg, support, hp: 100, color, direction, lastShoot: 0, lastJump: 0, spawnPos: { x: x, y: y } };
     Composite.add(world, [head, chest, arm, leg, neck, shoulder, waist, support]);
     return fighter;
 }
@@ -151,11 +151,14 @@ function handleJoystick(manager, fighter) {
         Body.applyForce(fighter.leg, fighter.leg.position, { x: moveX * 0.007 * Math.min(force, 2), y: 0 });
 
         const now = Date.now();
+        
+        // 🔥 判斷腿部是否與地板有碰撞，確定角色在地板上
+        const isGrounded = Query.collides(fighter.leg, [ground]).length > 0;
 
-        if (data.vector && data.vector.y > 0.6 && now - fighter.lastJump > 1000) {
+        if (data.vector && data.vector.y > 0.6 && now - fighter.lastJump > 500 && isGrounded) {
             fighter.lastJump = now;
-            // 🔥 加大跳躍的作用力 (從 -0.22 提升至 -0.45)，讓角色跳得更高
-            Body.applyForce(fighter.chest, fighter.chest.position, { x: 0, y: -0.45 });
+            // 🔥 加大跳躍的作用力 (提升至 -0.8)，讓角色跳得更高
+            Body.applyForce(fighter.chest, fighter.chest.position, { x: 0, y: -0.8 });
         }
 
         if (force > 1.8) shoot(fighter);
@@ -171,11 +174,26 @@ Events.on(engine, 'collisionStart', (event) => {
         const checkHit = (bullet, target, fillId, fighter) => {
             if (bullet.label === 'bullet' && (target === fighter.head || target === fighter.chest)) {
                 fighter.hp -= 10;
-                document.getElementById(fillId).style.width = fighter.hp + '%';
+                document.getElementById(fillId).style.width = Math.max(0, fighter.hp) + '%';
                 Composite.remove(world, bullet);
                 if (fighter.hp <= 0) {
-                    alert(fighter.color === '#1e90ff' ? 'Red Wins!' : 'Blue Wins!');
-                    location.reload();
+                    // 🔥 死後在原本的生成位置上方重生，並恢復血量
+                    fighter.hp = 100;
+                    document.getElementById(fillId).style.width = '100%';
+                    
+                    const spawnX = fighter.spawnPos.x;
+                    const spawnY = fighter.spawnPos.y - 400; // 在原本生成位置的上方 400 像素處
+                    
+                    Body.setPosition(fighter.head, { x: spawnX, y: spawnY - 100 });
+                    Body.setPosition(fighter.chest, { x: spawnX, y: spawnY - 60 });
+                    Body.setPosition(fighter.arm, { x: spawnX + (fighter.direction * 30), y: spawnY - 75 });
+                    Body.setPosition(fighter.leg, { x: spawnX, y: spawnY });
+                    
+                    // 清除殘餘的物理速度與旋轉
+                    [fighter.head, fighter.chest, fighter.arm, fighter.leg].forEach(b => {
+                        Body.setVelocity(b, { x: 0, y: 0 });
+                        Body.setAngularVelocity(b, 0);
+                    });
                 }
             }
         };
