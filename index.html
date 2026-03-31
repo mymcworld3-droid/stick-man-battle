@@ -3,29 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>竹竿人醉酒對決</title>
+    <title>竹竿人：雙搖桿對決</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; font-family: sans-serif; }
         canvas { display: block; }
         #ui {
-            position: absolute; top: 20px; width: 100%;
+            position: absolute; top: 10px; width: 100%;
             display: flex; justify-content: space-around;
-            color: white; font-family: Arial; font-size: 24px; pointer-events: none;
+            color: white; font-size: 20px; pointer-events: none;
+            text-shadow: 2px 2px 4px #000;
         }
+        /* 搖桿容器區域 */
+        .joystick-zone {
+            position: absolute; bottom: 0; width: 50%; height: 40%;
+            z-index: 10;
+        }
+        #left-zone { left: 0; }
+        #right-zone { right: 0; }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <div id="p1-hp">Player 1: 100</div>
-    <div id="p2-hp">Player 2: 100</div>
+    <div id="p1-ui">P1 HP: 100</div>
+    <div id="p2-ui">P2 HP: 100</div>
 </div>
 
-<script>
-const { Engine, Render, Runner, Bodies, Composite, Constraint, Vector, Events } = Matter;
+<div id="left-zone" class="joystick-zone"></div>
+<div id="right-zone" class="joystick-zone"></div>
 
-// 初始化引擎
+<script>
+const { Engine, Render, Runner, Bodies, Composite, Constraint, Vector, Body } = Matter;
+
 const engine = Engine.create();
 const world = engine.world;
 const render = Render.create({
@@ -34,90 +45,103 @@ const render = Render.create({
     options: {
         width: window.innerWidth,
         height: window.innerHeight,
-        wireframes: false, // 設為 false 顯示顏色
-        background: '#333'
+        wireframes: false,
+        background: '#2c3e50'
     }
 });
 
 Render.run(render);
 Runner.run(Runner.create(), engine);
 
-// 建立地面
-const ground = Bodies.rectangle(window.innerWidth/2, window.innerHeight - 20, window.innerWidth, 40, { isStatic: true, render: { fillStyle: '#555' } });
-Composite.add(world, ground);
+// 邊界與地面
+const ground = Bodies.rectangle(window.innerWidth/2, window.innerHeight - 20, window.innerWidth, 40, { isStatic: true, render: { fillStyle: '#34495e' } });
+const wallL = Bodies.rectangle(0, window.innerHeight/2, 40, window.innerHeight, { isStatic: true });
+const wallR = Bodies.rectangle(window.innerWidth, window.innerHeight/2, 40, window.innerHeight, { isStatic: true });
+Composite.add(world, [ground, wallL, wallR]);
 
-// 建立火柴人函式
-function createRagdoll(x, y, color) {
-    const group = Matter.Body.nextGroup(true);
-    
-    // 身體各部位
-    const head = Bodies.circle(x, y - 80, 15, { collisionFilter: { group: group }, render: { fillStyle: color } });
-    const chest = Bodies.rectangle(x, y - 40, 20, 50, { collisionFilter: { group: group }, render: { fillStyle: color } });
-    const arm = Bodies.rectangle(x + 20, y - 55, 40, 10, { collisionFilter: { group: group }, render: { fillStyle: color } });
-    
-    // 連結身體 (脖子)
-    const neck = Constraint.create({
-        bodyA: head, bodyB: chest,
-        pointB: { x: 0, y: -25 },
-        stiffness: 0.2, render: { visible: false }
-    });
+// 建立布娃娃角色
+function createFighter(x, y, color, direction) {
+    const group = Body.nextGroup(true);
+    const head = Bodies.circle(x, y - 90, 18, { collisionFilter: { group: group }, friction: 0.5, render: { fillStyle: color } });
+    const chest = Bodies.rectangle(x, y - 50, 25, 60, { collisionFilter: { group: group }, friction: 0.5, render: { fillStyle: color } });
+    const arm = Bodies.rectangle(x + (direction * 25), y - 65, 50, 12, { collisionFilter: { group: group }, render: { fillStyle: color } });
+    const leg = Bodies.rectangle(x, y, 25, 50, { collisionFilter: { group: group }, friction: 0.8, render: { fillStyle: color } });
 
-    // 連結手臂 (肩膀)
-    const shoulder = Constraint.create({
-        bodyA: chest, bodyB: arm,
-        pointA: { x: 10, y: -15 },
-        pointB: { x: -20, y: 0 },
-        stiffness: 0.4, render: { visible: true, strokeStyle: '#fff' }
-    });
-
-    // 腳部固定 (讓角色稍微站立但會晃)
-    const leg = Bodies.rectangle(x, y, 20, 40, { collisionFilter: { group: group }, render: { fillStyle: color } });
-    const waist = Constraint.create({
-        bodyA: chest, bodyB: leg,
-        pointA: { x: 0, y: 25 },
-        pointB: { x: 0, y: -20 },
-        stiffness: 0.1, render: { visible: false }
-    });
+    // 關節串接
+    const neck = Constraint.create({ bodyA: head, bodyB: chest, pointB: { x: 0, y: -30 }, stiffness: 0.5 });
+    const shoulder = Constraint.create({ bodyA: chest, bodyB: arm, pointA: { x: direction * 12, y: -20 }, pointB: { x: direction * -20, y: 0 }, stiffness: 0.8 });
+    const waist = Constraint.create({ bodyA: chest, bodyB: leg, pointA: { x: 0, y: 30 }, pointB: { x: 0, y: -25 }, stiffness: 0.2 });
 
     Composite.add(world, [head, chest, arm, leg, neck, shoulder, waist]);
-    
-    return { head, chest, arm };
+    return { head, chest, arm, leg, hp: 100, direction };
 }
 
-const player1 = createRagdoll(200, window.innerHeight - 100, '#007AFF');
-const player2 = createRagdoll(window.innerWidth - 200, window.innerHeight - 100, '#FF3B30');
+const p1 = createFighter(250, window.innerHeight - 100, '#e74c3c', 1); // 玩家1
+const p2 = createFighter(window.innerWidth - 250, window.innerHeight - 100, '#3498db', -1); // 玩家2
 
 // 射擊邏輯
-function shoot(fighter, direction) {
-    // 讓手臂向上旋轉力矩
-    Matter.Body.applyForce(fighter.arm, fighter.arm.position, { x: 0, y: -0.02 });
-
-    // 建立子彈
-    const bullet = Bodies.circle(fighter.arm.position.x + (30 * direction), fighter.arm.position.y, 5, {
+function fire(fighter) {
+    const forceDir = fighter.direction;
+    const bullet = Bodies.circle(fighter.arm.position.x + (40 * forceDir), fighter.arm.position.y, 6, {
+        label: 'bullet',
         frictionAir: 0,
-        render: { fillStyle: 'yellow' }
+        render: { fillStyle: '#f1c40f' }
     });
-    Matter.Body.setVelocity(bullet, { x: 15 * direction, y: -2 });
+    
+    // 計算手臂指向的速度
+    const angle = fighter.arm.angle;
+    const speed = 18;
+    Body.setVelocity(bullet, { x: Math.cos(angle) * speed * forceDir, y: Math.sin(angle) * speed });
+    
+    // 後座力
+    Body.applyForce(fighter.chest, fighter.chest.position, { x: -0.015 * forceDir, y: -0.005 });
+    
     Composite.add(world, bullet);
-
-    // 後座力推動身體
-    Matter.Body.applyForce(fighter.chest, fighter.chest.position, { x: -0.01 * direction, y: 0 });
-
-    // 子彈消失計時
-    setTimeout(() => Composite.remove(world, bullet), 2000);
+    setTimeout(() => Composite.remove(world, bullet), 1500);
 }
 
-// 平板觸控事件
-window.addEventListener('touchstart', (e) => {
-    const touchX = e.touches[0].clientX;
-    if (touchX < window.innerWidth / 2) {
-        shoot(player1, 1);
-    } else {
-        shoot(player2, -1);
-    }
+// 初始化搖桿
+const leftJoy = nipplejs.create({ zone: document.getElementById('left-zone'), mode: 'static', position: { left: '80px', bottom: '80px' }, color: 'red' });
+const rightJoy = nipplejs.create({ zone: document.getElementById('right-zone'), mode: 'static', position: { right: '80px', bottom: '80px' }, color: 'blue' });
+
+// 搖桿控制邏輯
+function setupControl(manager, fighter) {
+    let lastShoot = 0;
+    manager.on('move', (evt, data) => {
+        const force = data.force;
+        const angle = data.angle.radian;
+
+        // 1. 移動：左右推搖桿帶動軀幹
+        if (data.direction) {
+            if (data.direction.x === 'left') Body.applyForce(fighter.leg, fighter.leg.position, { x: -0.005 * force, y: 0 });
+            if (data.direction.x === 'right') Body.applyForce(fighter.leg, fighter.leg.position, { x: 0.005 * force, y: 0 });
+        }
+
+        // 2. 手臂旋轉：搖桿角度控制手臂
+        Body.setAngle(fighter.arm, angle);
+
+        // 3. 自動射擊：當搖桿推力超過一定值就開火
+        const now = Date.now();
+        if (force > 1.5 && now - lastShoot > 400) {
+            fire(fighter);
+            lastShoot = now;
+        }
+    });
+}
+
+setupControl(leftJoy, p1);
+setupControl(rightJoy, p2);
+
+// 碰撞傷害偵測
+Matter.Events.on(engine, 'collisionStart', (event) => {
+    event.pairs.forEach(pair => {
+        if (pair.bodyA.label === 'bullet' || pair.bodyB.label === 'bullet') {
+            // 簡易判定：如果子彈撞到非地面，就扣血
+            console.log("Hit!");
+        }
+    });
 });
 
-// 視窗調整
 window.addEventListener('resize', () => {
     render.canvas.width = window.innerWidth;
     render.canvas.height = window.innerHeight;
