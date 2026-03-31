@@ -72,12 +72,21 @@ function createFighter(x, y, color, direction) {
     const group = Body.nextGroup(true);
     const head = Bodies.circle(x, y - 100, 18, { collisionFilter: { group: group }, density: 0.001, render: { fillStyle: color } });
     const chest = Bodies.rectangle(x, y - 60, 25, 60, { collisionFilter: { group: group }, density: 0.002, render: { fillStyle: color } });
-    const arm = Bodies.rectangle(x + (direction * 30), y - 75, 55, 12, { collisionFilter: { group: group }, density: 0.001, render: { fillStyle: color } });
+    
+    // 🔥 修正：手臂在生成時角度設定為朝下 (Math.PI / 2)
+    const arm = Bodies.rectangle(x, y - 75, 55, 12, { 
+        collisionFilter: { group: group }, 
+        density: 0.001, 
+        angle: Math.PI / 2, // 垂直向下
+        render: { fillStyle: color } 
+    });
+    
     const leg = Bodies.rectangle(x, y, 35, 50, { collisionFilter: { group: group }, density: 0.01, friction: 1, render: { fillStyle: color } });
 
     // 🔥 頭要立好：提升頸部關節 stiffness 至 0.9，使頭部更穩固
     const neck = Constraint.create({ bodyA: head, bodyB: chest, pointA: { x: 0, y: 15 }, pointB: { x: 0, y: -30 }, stiffness: 0.9, length: 2, render: { visible: false } });
-    const shoulder = Constraint.create({ bodyA: chest, bodyB: arm, pointA: { x: direction * 12, y: -20 }, pointB: { x: direction * -25, y: 0 }, stiffness: 0.9, length: 2 });
+    // 🔥 手放在身體正中央：將 bodyA(chest) 的 pointA.x 設為 0，這樣關節就在胸口正中間
+    const shoulder = Constraint.create({ bodyA: chest, bodyB: arm, pointA: { x: 0, y: -20 }, pointB: { x: direction * -25, y: 0 }, stiffness: 0.9, length: 2 });
     
     // 讓腿部與胸部連結更死，不再搖晃 (stiffness 1)
     const waist = Constraint.create({ bodyA: chest, bodyB: leg, pointA: { x: 0, y: 30 }, pointB: { x: 0, y: -25 }, stiffness: 1, length: 2, render: { visible: false } });
@@ -127,7 +136,7 @@ Events.on(engine, 'beforeUpdate', () => {
         // 自動平衡
         f.chest.torque = (0 - f.chest.angle) * 0.2;
         
-        // 🔥 頭要立好：強制鎖定頭的角度與角速度 (也可以利用 constraint stiffness 代替)
+        // 🔥 頭要立好：強制鎖定頭的角度與角速度
         Body.setAngle(f.head, 0);
         Body.setAngularVelocity(f.head, 0);
 
@@ -135,9 +144,7 @@ Events.on(engine, 'beforeUpdate', () => {
         Body.setAngle(f.leg, 0);
         Body.setAngularVelocity(f.leg, 0);
         
-        // 🔥 手放在身體正中央 (將手拉至身體垂直中心線並向下)
-        // 目標角度：垂直向下為 Math.PI / 2
-        f.arm.torque = (Math.PI / 2 - f.arm.angle) * 0.3; // 施加更強的力
+        // 已經移除了之前強加在手部的 torque，解決瞄準時手部抽搐/邏輯衝突的問題
         
         // 讓魁儡支撐點的 X 座標跟隨角色的胸部，解除原地綁定的限制，實現自由移動
         f.support.pointA.x = f.chest.position.x;
@@ -203,8 +210,11 @@ Events.on(engine, 'collisionStart', (event) => {
                     
                     Body.setPosition(fighter.head, { x: spawnX, y: spawnY - 100 });
                     Body.setPosition(fighter.chest, { x: spawnX, y: spawnY - 60 });
-                    Body.setPosition(fighter.arm, { x: spawnX + (fighter.direction * 30), y: spawnY - 75 });
+                    Body.setPosition(fighter.arm, { x: spawnX, y: spawnY - 75 });
                     Body.setPosition(fighter.leg, { x: spawnX, y: spawnY });
+                    
+                    // 重生時也要把手臂角度重設為朝下
+                    Body.setAngle(fighter.arm, Math.PI / 2);
                     
                     // 清除殘餘的物理速度與旋轉
                     [fighter.head, fighter.chest, fighter.arm, fighter.leg].forEach(b => {
