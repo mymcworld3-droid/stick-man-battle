@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>竹竿人：醉酒雙搖桿對決 (自由移動與高跳版)</title>
+    <title>竹竿人：醉酒雙搖桿對決 (正姿高跳版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
@@ -75,9 +75,11 @@ function createFighter(x, y, color, direction) {
     const arm = Bodies.rectangle(x + (direction * 30), y - 75, 55, 12, { collisionFilter: { group: group }, density: 0.001, render: { fillStyle: color } });
     const leg = Bodies.rectangle(x, y, 35, 50, { collisionFilter: { group: group }, density: 0.01, friction: 1, render: { fillStyle: color } });
 
-    const neck = Constraint.create({ bodyA: head, bodyB: chest, pointA: { x: 0, y: 15 }, pointB: { x: 0, y: -30 }, stiffness: 0.6, length: 2, render: { visible: false } });
+    // 🔥 頭要立好：提升頸部關節 stiffness 至 0.9，使頭部更穩固
+    const neck = Constraint.create({ bodyA: head, bodyB: chest, pointA: { x: 0, y: 15 }, pointB: { x: 0, y: -30 }, stiffness: 0.9, length: 2, render: { visible: false } });
     const shoulder = Constraint.create({ bodyA: chest, bodyB: arm, pointA: { x: direction * 12, y: -20 }, pointB: { x: direction * -25, y: 0 }, stiffness: 0.9, length: 2 });
-    // 🔥 將腰部關節 stiffness 提升至 1，讓腿部與胸部連結更死，不再搖晃
+    
+    // 讓腿部與胸部連結更死，不再搖晃 (stiffness 1)
     const waist = Constraint.create({ bodyA: chest, bodyB: leg, pointA: { x: 0, y: 30 }, pointB: { x: 0, y: -25 }, stiffness: 1, length: 2, render: { visible: false } });
 
     // 魁儡支撐，防止徹底倒地
@@ -89,7 +91,7 @@ function createFighter(x, y, color, direction) {
         render: { visible: false }
     });
 
-    // 🔥 將 support 加入回傳物件中，以便後續更新座標。同時紀錄原本的生成位置 (spawnPos) 供重生使用。
+    // 將 support 加入回傳物件中，以便後續更新座標。同時紀錄原本的生成位置 (spawnPos) 供重生使用。
     const fighter = { head, chest, arm, leg, support, hp: 100, color, direction, lastShoot: 0, lastJump: 0, spawnPos: { x: x, y: y } };
     Composite.add(world, [head, chest, arm, leg, neck, shoulder, waist, support]);
     return fighter;
@@ -125,11 +127,19 @@ Events.on(engine, 'beforeUpdate', () => {
         // 自動平衡
         f.chest.torque = (0 - f.chest.angle) * 0.2;
         
-        // 🔥 讓腳不能搖：強制鎖定腳的角度與角速度，取代原本的 torque 恢復
+        // 🔥 頭要立好：強制鎖定頭的角度與角速度 (也可以利用 constraint stiffness 代替)
+        Body.setAngle(f.head, 0);
+        Body.setAngularVelocity(f.head, 0);
+
+        // 讓腳不能搖：強制鎖定腳的角度與角速度
         Body.setAngle(f.leg, 0);
         Body.setAngularVelocity(f.leg, 0);
         
-        // 🔥 讓魁儡支撐點的 X 座標跟隨角色的胸部，解除原地綁定的限制，實現自由移動
+        // 🔥 手放在身體正中央 (將手拉至身體垂直中心線並向下)
+        // 目標角度：垂直向下為 Math.PI / 2
+        f.arm.torque = (Math.PI / 2 - f.arm.angle) * 0.3; // 施加更強的力
+        
+        // 讓魁儡支撐點的 X 座標跟隨角色的胸部，解除原地綁定的限制，實現自由移動
         f.support.pointA.x = f.chest.position.x;
     });
 });
@@ -153,10 +163,10 @@ function handleJoystick(manager, fighter) {
 
         const now = Date.now();
         
-        // 🔥 判斷腿部是否與地板有碰撞，確定角色在地板上
+        // 判斷腿部是否與地板有碰撞，確定角色在地板上
         const isGrounded = Query.collides(fighter.leg, [ground]).length > 0;
 
-        // 🔥 跳的時候才能移動 (只有在離開地板時，才給予水平移動的推力)
+        // 跳的時候才能移動 (只有在離開地板時，才給予水平移動的推力)
         if (!isGrounded) {
             const moveX = Math.cos(data.angle.radian);
             Body.applyForce(fighter.leg, fighter.leg.position, { x: moveX * 0.007 * Math.min(force, 2), y: 0 });
@@ -164,7 +174,7 @@ function handleJoystick(manager, fighter) {
 
         if (data.vector && data.vector.y > 0.6 && now - fighter.lastJump > 500 && isGrounded) {
             fighter.lastJump = now;
-            // 🔥 加大跳躍的作用力 (提升至 -0.8)，讓角色跳得更高
+            // 加大跳躍的作用力 (提升至 -0.8)，讓角色跳得更高
             Body.applyForce(fighter.chest, fighter.chest.position, { x: 0, y: -0.8 });
         }
 
@@ -184,7 +194,7 @@ Events.on(engine, 'collisionStart', (event) => {
                 document.getElementById(fillId).style.width = Math.max(0, fighter.hp) + '%';
                 Composite.remove(world, bullet);
                 if (fighter.hp <= 0) {
-                    // 🔥 死後在原本的生成位置上方重生，並恢復血量
+                    // 死後在原本的生成位置上方重生，並恢復血量
                     fighter.hp = 100;
                     document.getElementById(fillId).style.width = '100%';
                     
