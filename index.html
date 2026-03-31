@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>竹竿人：醉酒雙搖桿對決 (跳躍版)</title>
+    <title>竹竿人：醉酒雙搖桿對決 (自由移動與高跳版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
@@ -72,7 +72,6 @@ function createFighter(x, y, color, direction) {
     const group = Body.nextGroup(true);
     const head = Bodies.circle(x, y - 100, 18, { collisionFilter: { group: group }, density: 0.001, render: { fillStyle: color } });
     const chest = Bodies.rectangle(x, y - 60, 25, 60, { collisionFilter: { group: group }, density: 0.002, render: { fillStyle: color } });
-    // 手臂初始位置根據方向調整
     const arm = Bodies.rectangle(x + (direction * 30), y - 75, 55, 12, { collisionFilter: { group: group }, density: 0.001, render: { fillStyle: color } });
     const leg = Bodies.rectangle(x, y, 35, 50, { collisionFilter: { group: group }, density: 0.01, friction: 1, render: { fillStyle: color } });
 
@@ -89,8 +88,8 @@ function createFighter(x, y, color, direction) {
         render: { visible: false }
     });
 
-    // 🔥 加入 lastJump 屬性來計算跳躍冷卻時間
-    const fighter = { head, chest, arm, leg, hp: 100, color, direction, lastShoot: 0, lastJump: 0 };
+    // 🔥 將 support 加入回傳物件中，以便後續更新座標
+    const fighter = { head, chest, arm, leg, support, hp: 100, color, direction, lastShoot: 0, lastJump: 0 };
     Composite.add(world, [head, chest, arm, leg, neck, shoulder, waist, support]);
     return fighter;
 }
@@ -104,8 +103,6 @@ function shoot(fighter) {
     if (now - fighter.lastShoot < 400) return;
     fighter.lastShoot = now;
 
-    // 根據角色結構的方向 (direction) 計算實際的開火角度
-    // 因為紅色 (-1) 的手臂連結點在右側，實體是向左延伸的，所以物理射擊角度需加上 180 度 (Math.PI)
     const shootAngle = fighter.arm.angle + (fighter.direction === -1 ? Math.PI : 0);
 
     const bulletX = fighter.arm.position.x + Math.cos(shootAngle) * 35;
@@ -115,7 +112,6 @@ function shoot(fighter) {
     const force = 18;
     Body.setVelocity(bullet, { x: Math.cos(shootAngle) * force, y: Math.sin(shootAngle) * force });
     
-    // 後座力
     Body.applyForce(fighter.chest, fighter.chest.position, { x: -Math.cos(shootAngle) * 0.015, y: -Math.sin(shootAngle) * 0.015 });
     
     Composite.add(world, bullet);
@@ -125,9 +121,12 @@ function shoot(fighter) {
 // 物理更新邏輯
 Events.on(engine, 'beforeUpdate', () => {
     [p1, p2].forEach(f => {
-        // 自動平衡： torque (力矩) 讓身體回正
+        // 自動平衡
         f.chest.torque = (0 - f.chest.angle) * 0.2;
         f.leg.torque = (0 - f.leg.angle) * 0.15;
+        
+        // 🔥 讓魁儡支撐點的 X 座標跟隨角色的胸部，解除原地綁定的限制，實現自由移動
+        f.support.pointA.x = f.chest.position.x;
     });
 });
 
@@ -140,28 +139,23 @@ function handleJoystick(manager, fighter) {
         const force = data.force;
         let angle = data.angle.radian;
 
-        // 控制手部旋轉外觀
         if (fighter.direction === 1) { 
-            // 藍色玩家
             angle = -angle; 
         } else {
-            // 紅色玩家
             angle = Math.PI - angle; 
         }
 
         Body.setAngle(fighter.arm, angle);
 
-        // 移動邏輯 (直接使用搖桿的原始 X 方向)
         const moveX = Math.cos(data.angle.radian);
         Body.applyForce(fighter.leg, fighter.leg.position, { x: moveX * 0.007 * Math.min(force, 2), y: 0 });
 
         const now = Date.now();
 
-        // 🔥 跳躍邏輯：當搖桿往上推 (y 向量大於 0.6) 且冷卻超過 1 秒
         if (data.vector && data.vector.y > 0.6 && now - fighter.lastJump > 1000) {
             fighter.lastJump = now;
-            // 對胸部施加一個向上的瞬間作用力
-            Body.applyForce(fighter.chest, fighter.chest.position, { x: 0, y: -0.22 });
+            // 🔥 加大跳躍的作用力 (從 -0.22 提升至 -0.45)，讓角色跳得更高
+            Body.applyForce(fighter.chest, fighter.chest.position, { x: 0, y: -0.45 });
         }
 
         if (force > 1.8) shoot(fighter);
