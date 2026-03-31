@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>竹竿人：醉酒雙搖桿對決 (修正版)</title>
+    <title>竹竿人：醉酒雙搖桿對決 (跳躍版)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
@@ -89,7 +89,8 @@ function createFighter(x, y, color, direction) {
         render: { visible: false }
     });
 
-    const fighter = { head, chest, arm, leg, hp: 100, color, direction, lastShoot: 0 };
+    // 🔥 加入 lastJump 屬性來計算跳躍冷卻時間
+    const fighter = { head, chest, arm, leg, hp: 100, color, direction, lastShoot: 0, lastJump: 0 };
     Composite.add(world, [head, chest, arm, leg, neck, shoulder, waist, support]);
     return fighter;
 }
@@ -153,6 +154,15 @@ function handleJoystick(manager, fighter) {
         // 移動邏輯 (直接使用搖桿的原始 X 方向)
         const moveX = Math.cos(data.angle.radian);
         Body.applyForce(fighter.leg, fighter.leg.position, { x: moveX * 0.007 * Math.min(force, 2), y: 0 });
+
+        const now = Date.now();
+
+        // 🔥 跳躍邏輯：當搖桿往上推 (y 向量大於 0.6) 且冷卻超過 1 秒
+        if (data.vector && data.vector.y > 0.6 && now - fighter.lastJump > 1000) {
+            fighter.lastJump = now;
+            // 對胸部施加一個向上的瞬間作用力
+            Body.applyForce(fighter.chest, fighter.chest.position, { x: 0, y: -0.22 });
+        }
 
         if (force > 1.8) shoot(fighter);
     });
