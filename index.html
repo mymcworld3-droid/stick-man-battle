@@ -103,16 +103,19 @@ function shoot(fighter) {
     if (now - fighter.lastShoot < 400) return;
     fighter.lastShoot = now;
 
-    const angle = fighter.arm.angle;
-    // 藍色往右噴，紅色往左噴，所以需要考慮 direction
-    const bulletX = fighter.arm.position.x + Math.cos(angle) * 35;
-    const bulletY = fighter.arm.position.y + Math.sin(angle) * 35;
+    // 根據角色結構的方向 (direction) 計算實際的開火角度
+    // 因為紅色 (-1) 的手臂連結點在右側，實體是向左延伸的，所以物理射擊角度需加上 180 度 (Math.PI)
+    const shootAngle = fighter.arm.angle + (fighter.direction === -1 ? Math.PI : 0);
+
+    const bulletX = fighter.arm.position.x + Math.cos(shootAngle) * 35;
+    const bulletY = fighter.arm.position.y + Math.sin(shootAngle) * 35;
     
     const bullet = Bodies.circle(bulletX, bulletY, 7, { label: 'bullet', frictionAir: 0, density: 0.01, render: { fillStyle: '#f1c40f' } });
     const force = 18;
-    Body.setVelocity(bullet, { x: Math.cos(angle) * force, y: Math.sin(angle) * force });
+    Body.setVelocity(bullet, { x: Math.cos(shootAngle) * force, y: Math.sin(shootAngle) * force });
     
-    Body.applyForce(fighter.chest, fighter.chest.position, { x: -Math.cos(angle) * 0.015, y: -Math.sin(angle) * 0.015 });
+    // 後座力
+    Body.applyForce(fighter.chest, fighter.chest.position, { x: -Math.cos(shootAngle) * 0.015, y: -Math.sin(shootAngle) * 0.015 });
     
     Composite.add(world, bullet);
     setTimeout(() => Composite.remove(world, bullet), 2000);
@@ -136,20 +139,18 @@ function handleJoystick(manager, fighter) {
         const force = data.force;
         let angle = data.angle.radian;
 
-        // 🔥 核心修正邏輯
+        // 控制手部旋轉外觀
         if (fighter.direction === 1) { 
-            // 藍色玩家：修正原本的左右相反
-            // 搖桿 $0$ 在右，藍人面向右，直接用 $-angle$ 修正對準
+            // 藍色玩家
             angle = -angle; 
         } else {
-            // 紅色玩家：修正原本的上下相反
-            // 使用對稱角修正
+            // 紅色玩家
             angle = Math.PI - angle; 
         }
 
         Body.setAngle(fighter.arm, angle);
 
-        // 移動邏輯
+        // 移動邏輯 (直接使用搖桿的原始 X 方向)
         const moveX = Math.cos(data.angle.radian);
         Body.applyForce(fighter.leg, fighter.leg.position, { x: moveX * 0.007 * Math.min(force, 2), y: 0 });
 
